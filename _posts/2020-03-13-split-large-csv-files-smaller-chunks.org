@@ -1,0 +1,67 @@
+#+TITLE: Using Python, subprocess, and Bash Commands to Split A Large CSV File Into Smaller Chunks
+#+SUBTITLE: Python function to split a large csv file into chunks by percentage of the file or number of lines.
+#+DATE: 2020-03-13
+
+#+STARTUP: showall indent
+#+OPTIONS: toc:nil
+#+OPTIONS: tex:t
+
+* Overview
+
+This is my first blog post, and I am going to present a simple function to split large csv files into smaller chunks using python =subprocess= package. This can be useful if you are working with a super large text file that you can't load it all into memory at once. Using =subprocess= you can easily call terminal commands from Python scripts, and get back the output as well (more about this in the next section). The function uses two bash commands: =wc= and =split=. =wc= is a function that can count the number of words, characters, or lines in a file. This is used to count the number of lines, so you can specify a percentage of the file to have in each sub-file. =split= is a command that can split a file into a number of sub-files with the specified number of lines in each sub-file.
+
+* How to use =subprocess=
+=subprocess= package allows you to call system commands from Python scripts. There are two different ways to call =subprocess= to run the commands. Generally, I find the method of passing in a list to =subprocess.run()= the easier method (eg.. =subprocess.run(['wc', '-l', 'test_file.csv'], stdout=subprocess.PIPE=, which equals running =wc -l test_file.csv= on the command line). The =stdout=subprocess.PIPE= argument is used to get the piped output, so therefore this will extract the number of lines in =test_file.csv=. The piped output is shown below:
+#+BEGIN_SRC sh
+   172 test_file.csv
+#+END_SRC
+Therefore, using =re.search= and the regex ='\\d+'=, we can extract 172 by returning the first group of digits in the string. One thing to note when dealing with piping from =subprocess= is that it returns a byte string that will likely need to be converted to a =utf-8= coded string by =str(cmd.stdout, 'utf-8')= or using =cmd.stdout.decode()=. You can also output any errors during running the command by passing in the argument =stderr=subprocess.PIPE=.
+
+* Splitting a large CSV file into smaller chunks
+The function below takes a file to be split as input =filepath=. The other important parameter is =lines_of_file= that can specify the percentage of the file or the exact number of lines to take from each file.
+
+#+BEGIN_SRC python
+import subprocess
+import re
+from typing import Union
+from pathlib import Path
+
+
+def split_into_chunks(filepath: Union[str, Path], lines_of_file: Union[int, float] = 0.5,
+                      force: bool = False, suffix: str = '',
+                      splitpath: Union[str, Path] = None) -> None:
+    """Split filepath into seperate csv files with `_aa` to `_az` added to the base filename as
+    necessary.
+
+    Args:
+        filepath: filename and path of file to be split
+        lines_of_file: percentage of file to take or lines of file (default: 0.5)
+        force: force the processing of split files even if they exist
+        suffix: suffix for split files eg. .csv or .tsv
+        splitpath: set the path to split files or an alternative base name for the split
+    """
+    # `with_suffix` removes the extension
+    no_extension = filepath.with_suffix('')
+    if splitpath is None:
+        splitpath = no_extension + '_'
+
+    # Checks if splitpath files already exist or can force creation
+    if not Path(no_extension + '_aa' + suffix).exists() or force is True:
+        if type(lines_of_file) is float:
+            # Get the total number of lines in the file
+            cmd = subprocess.run(['wc', '-l', filepath], stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            if cmd.stdout:
+                total_lines = int(re.search('\\d+', str(cmd.stdout, 'utf-8'))[0])
+                lines_of_file = int(total_lines * lines_of_file) + 1
+            else:
+                print('This error ocurred:', cmd.stderr)
+
+        subprocess.run(['split', '-l', str(lines_of_file), filepath, splitpath])
+#+END_SRC
+
+* Conclusions
+1. =subprocess= is extremely useful package that enables Unix bash commands to be run easily from python scripts
+   - Both the output and the errors from the commands can be used within your script
+2. Presented a useful function to split huge csv files into smaller chunks to not overload your memory.
+   + Can pass in the percentage of the total lines or the number of lines per csv file
